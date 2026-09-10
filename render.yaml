@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: slendytubbies-2d-browser-port
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production

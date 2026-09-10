@@ -1,0 +1,9 @@
+{
+  "name": "slendytubbies-2d-browser-port",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=22"},
+  "scripts": {"build": "tar -xzf public.tar.gz", "start": "node server.mjs", "test": "node test-server.mjs"},
+  "dependencies": {"ws": "^8.18.3"}
+}
