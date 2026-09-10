@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: slendytubbies-2d-browser-port
+    name: slendytubbies-2d-browser-edition
     runtime: node
     plan: free
     region: oregon

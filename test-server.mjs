@@ -20,12 +20,16 @@ try{
  const state=await guest.call({...guestRoom,action:'sync',position:{x:150,y:100,direction:2},world:{...world,status:'won',taken:Array(10).fill(true)}});
  assert.equal(state.world.status,'play');assert.equal(state.world.taken.filter(Boolean).length,1);assert.equal(state.players.length,4);
  await assert.rejects(guest.call({...guestRoom,action:'sync',position:{x:-1,y:1,direction:0}}),/Posición/);
+ await host.call({...hostRoom,action:'sync',position:{x:5600,y:5600,direction:0},world:{...world,foes:[{x:5500,y:5500,direction:0}]}});
+ await assert.rejects(guest.call({...guestRoom,action:'sync',position:{x:5735,y:100,direction:0}}),/Posición/);
  await assert.rejects(guest.call({...guestRoom,token:'invalid',action:'sync',position:null}),/sesión/);
  const extra=await client();await assert.rejects(extra.call({action:'join',code:hostRoom.code,name:'Late'}),/comenzó/);
  await guest.call({...guestRoom,action:'leave'});const left=await host.call({...hostRoom,action:'sync',position:null,world});assert.equal(left.players.length,3);
  await host.call({...hostRoom,action:'leave'});await assert.rejects(extra.call({action:'join',code:hostRoom.code}),/no existe/);
- const host2=await host.call({action:'create',map:'caves'});const extra2=await extra.call({action:'join',code:host2.code});
+ await assert.rejects(host.call({action:'create',map:'caves',custardCount:26}),/1 y 25/);
+ const host2=await host.call({action:'create',map:'caves',custardCount:25});const extra2=await extra.call({action:'join',code:host2.code});assert.equal(extra2.custardCount,25);await assert.rejects(host.call({...host2,action:'sync',position:null,world}),/Estado/);await host.call({...host2,action:'sync',position:null,world:{...world,taken:Array(25).fill(false)}});
  const closeNotice=once(extra.s,'message');host.s.close();const [notice]=await closeNotice;assert.equal(JSON.parse(notice).event,'closed');
  console.log('PASS real WebSocket rooms: four-player limit, shared progress, host authority, validation, late joins, leave and host disconnect.');
 }finally{for(const s of opened)s.close();if(processServer)processServer.kill();}
+
 

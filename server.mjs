@@ -29,9 +29,10 @@ server.on('upgrade',(req,socket,head)=>{
   if (!allowed || sockets.clients.size >= 400) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); return; }
   sockets.handleUpgrade(req,socket,head,ws=>sockets.emit('connection',ws));
 });
-const pos = p => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>=0 && p.x<=5120 && p.y>=0 && p.y<=5120 && Number.isInteger(p.direction) && p.direction>=0 && p.direction<=3;
-function world(w) {
-  if (!w || !['lobby','play','won','lost'].includes(w.status) || !Array.isArray(w.taken) || w.taken.length!==10 || !w.taken.every(x=>typeof x==='boolean') || !Array.isArray(w.foes) || w.foes.length>4 || !w.foes.every(pos) || !Array.isArray(w.dead) || w.dead.length>4 || !w.dead.every(x=>typeof x==='string'&&x.length<=36) || !Number.isFinite(w.time) || w.time<0 || w.time>86400) throw Error('Estado de partida inválido');
+const mapSize = map => map==='mainland'?5734.4:5120;
+const pos = (p,map) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>=0 && p.x<=mapSize(map) && p.y>=0 && p.y<=mapSize(map) && Number.isInteger(p.direction) && p.direction>=0 && p.direction<=3;
+function world(w,total,map) {
+  if (!w || !['lobby','play','won','lost'].includes(w.status) || !Array.isArray(w.taken) || w.taken.length!==total || !w.taken.every(x=>typeof x==='boolean') || !Array.isArray(w.foes) || w.foes.length>4 || !w.foes.every(p=>pos(p,map)) || !Array.isArray(w.dead) || w.dead.length>4 || !w.dead.every(x=>typeof x==='string'&&x.length<=36) || !Number.isFinite(w.time) || w.time<0 || w.time>86400) throw Error('Estado de partida inválido');
   return {status:w.status,taken:w.taken,foes:w.foes.map(p=>({x:p.x,y:p.y,direction:p.direction})),dead:w.dead,time:w.time};
 }
 function send(ws,data) { if(ws.readyState===WebSocket.OPEN && ws.bufferedAmount<256000) ws.send(JSON.stringify(data)); }
@@ -63,9 +64,11 @@ sockets.on('connection',ws=>{
         let room;
         if (b.action==='create') {
           if (!maps.has(b.map)) throw Error('Mapa inválido');
+          const custardCount=b.custardCount??10;
+          if(!Number.isInteger(custardCount)||custardCount<1||custardCount>25)throw Error('Elige entre 1 y 25 papillas');
           if (rooms.size>=100) throw Error('Servidor lleno. Intenta más tarde.');
           let code; do { code=randomBytes(4).toString('hex').toUpperCase(); } while(rooms.has(code));
-          room={code,map:b.map,host:null,members:new Map(),world:{status:'lobby',taken:Array(10).fill(false),foes:[],dead:[],time:0}};
+          room={code,map:b.map,custardCount,host:null,members:new Map(),world:{status:'lobby',taken:Array(custardCount).fill(false),foes:[],dead:[],time:0}};
           rooms.set(code,room);
         } else {
           room=rooms.get(String(b.code||'').trim().toUpperCase());
@@ -76,14 +79,14 @@ sockets.on('connection',ws=>{
         const m={id:randomUUID(),token:randomUUID(),code:room.code,name:typeof b.name==='string'?b.name.trim().slice(0,20)||'Guardián':'Guardián',position:null,socket:ws};
         room.members.set(m.id,m); ws.member=m;
         if (!room.host) room.host=m.id;
-        result={code:room.code,id:m.id,token:m.token,host:room.host===m.id,map:room.map};
+        result={code:room.code,id:m.id,token:m.token,host:room.host===m.id,map:room.map,custardCount:room.custardCount};
       } else {
         const m=ws.member,room=m&&rooms.get(m.code);
         if (!room || b.token!==m.token || b.code!==m.code) throw Error('La sesión de sala terminó');
         if (b.action==='leave') { leave(ws); result={ok:true}; }
         else if (b.action==='sync') {
-          if (b.position!=null && !pos(b.position)) throw Error('Posición inválida');
-          const nextWorld=room.host===m.id?world(b.world):null;
+          if (b.position!=null && !pos(b.position,room.map)) throw Error('Posición inválida');
+          const nextWorld=room.host===m.id?world(b.world,room.custardCount,room.map):null;
           m.position=b.position?{x:b.position.x,y:b.position.y,direction:b.position.direction,walking:!!b.position.walking}:null;
           if (nextWorld) room.world=nextWorld;
           result={map:room.map,host:room.host,world:room.world,players:[...room.members.values()].map(p=>({id:p.id,name:p.name,position:p.position}))};
@@ -95,6 +98,6 @@ sockets.on('connection',ws=>{
 });
 const heartbeat=setInterval(()=>{for(const ws of sockets.clients){if(!ws.alive){ws.terminate();continue;}ws.alive=false;ws.ping();}},15000);
 const port=Number(process.env.PORT)||10000;
-server.listen(port,'0.0.0.0',()=>console.log(`Slendytubbies 2D Browser Port listening on ${port}`));
+server.listen(port,'0.0.0.0',()=>console.log(`Slendytubbies 2D Browser Edition listening on ${port}`));
 function shutdown(){clearInterval(heartbeat);for(const ws of sockets.clients)ws.close(1012,'Servidor reiniciándose');server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),3000).unref();}
 process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);
