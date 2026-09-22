@@ -36,6 +36,12 @@ function world(w,total,map) {
   return {status:w.status,taken:w.taken,foes:w.foes.map(p=>({x:p.x,y:p.y,direction:p.direction})),dead:w.dead,time:w.time};
 }
 function send(ws,data) { if(ws.readyState===WebSocket.OPEN && ws.bufferedAmount<256000) ws.send(JSON.stringify(data)); }
+function publicRooms() {
+  return [...rooms.values()].filter(room=>room.world.status==='lobby').map(room=>({
+    id:room.code,name:room.name,map:room.map,custardCount:room.custardCount,
+    players:room.members.size,maxPlayers:4,hostName:room.host?[...room.members.values()].find(p=>p.id===room.host)?.name||'Guardián':'Guardián',status:room.world.status
+  }));
+}
 function leave(ws) {
   const member = ws.member; ws.member = null;
   if (!member) return;
@@ -59,7 +65,9 @@ sockets.on('connection',ws=>{
       b=JSON.parse(raw.toString());
       if (!b || !Number.isInteger(b.requestId)) throw Error('Solicitud inválida');
       let result;
-      if (b.action==='create' || b.action==='join') {
+      if (b.action==='list') {
+        result={rooms:publicRooms()};
+      } else if (b.action==='create' || b.action==='join') {
         if (ws.member) throw Error('Sal de la sala actual primero');
         let room;
         if (b.action==='create') {
@@ -68,10 +76,11 @@ sockets.on('connection',ws=>{
           if(!Number.isInteger(custardCount)||custardCount<1||custardCount>25)throw Error('Elige entre 1 y 25 papillas');
           if (rooms.size>=100) throw Error('Servidor lleno. Intenta más tarde.');
           let code; do { code=randomBytes(4).toString('hex').toUpperCase(); } while(rooms.has(code));
-          room={code,map:b.map,custardCount,host:null,members:new Map(),world:{status:'lobby',taken:Array(custardCount).fill(false),foes:[],dead:[],time:0}};
+          const roomName=typeof b.roomName==='string'?b.roomName.trim().slice(0,28)||'Partida de Guardián':'Partida de Guardián';
+          room={code,name:roomName,map:b.map,custardCount,host:null,members:new Map(),world:{status:'lobby',taken:Array(custardCount).fill(false),foes:[],dead:[],time:0}};
           rooms.set(code,room);
         } else {
-          room=rooms.get(String(b.code||'').trim().toUpperCase());
+          room=rooms.get(String(b.roomId||b.code||'').trim().toUpperCase());
           if (!room) throw Error('La sala no existe o el anfitrión se desconectó');
           if (room.world.status!=='lobby') throw Error('La partida ya comenzó');
           if (room.members.size>=4) throw Error('La sala está llena');
@@ -79,7 +88,7 @@ sockets.on('connection',ws=>{
         const m={id:randomUUID(),token:randomUUID(),code:room.code,name:typeof b.name==='string'?b.name.trim().slice(0,20)||'Guardián':'Guardián',position:null,socket:ws};
         room.members.set(m.id,m); ws.member=m;
         if (!room.host) room.host=m.id;
-        result={code:room.code,id:m.id,token:m.token,host:room.host===m.id,map:room.map,custardCount:room.custardCount};
+        result={roomId:room.code,code:room.code,roomName:room.name,id:m.id,token:m.token,host:room.host===m.id,map:room.map,custardCount:room.custardCount};
       } else {
         const m=ws.member,room=m&&rooms.get(m.code);
         if (!room || b.token!==m.token || b.code!==m.code) throw Error('La sesión de sala terminó');
