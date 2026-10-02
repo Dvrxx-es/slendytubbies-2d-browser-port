@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');const entry = path.join(path.dirname(fileURLToPath(import.meta.url)), 'index-live.html');
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
+const entry = path.join(path.dirname(fileURLToPath(import.meta.url)), 'index-live.html');
 const maps = new Set(['mainland','mainland_s3','caves','mountains','lair','station','outskirts','outskirts_dawn','lake','school','reject','dream','maze','blue']);
 const rooms = new Map();
 const mime = {'.html':'text/html; charset=utf-8','.png':'image/png','.ogg':'audio/ogg','.ttf':'font/ttf','.js':'text/javascript; charset=utf-8'};
@@ -16,7 +17,7 @@ const server = http.createServer(async (req,res) => {
   try {
     const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
     const file = pathname === '/' ? entry : path.resolve(root, '.' + pathname);
-    if (pathname !== '/' && !file.startsWith(root + path.sep))
+    if (pathname !== '/' && !file.startsWith(root + path.sep)) throw Error();
     const info = await stat(file); if (!info.isFile()) throw Error();
     res.writeHead(200, {'Content-Type':mime[path.extname(file)]||'application/octet-stream','Content-Length':info.size,'Cache-Control':file.endsWith('.html')?'no-cache':'public, max-age=3600','X-Content-Type-Options':'nosniff','Referrer-Policy':'strict-origin-when-cross-origin'});
     if (req.method === 'HEAD') res.end(); else createReadStream(file).on('error',()=>res.destroy()).pipe(res);
@@ -29,7 +30,10 @@ server.on('upgrade',(req,socket,head)=>{
   if (!allowed || sockets.clients.size >= 400) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); return; }
   sockets.handleUpgrade(req,socket,head,ws=>sockets.emit('connection',ws));
 });
-const mapSize = map => map==='mainland'?35.84*1.4*160:5120;
+// Mainland scenery and collision geometry are enlarged by the same 1.4 scale
+// used by the browser client. Keep the server boundary in that coordinate
+// space so a player can sync from the spawn point and reach the full map.
+const mapSize = map => map==='mainland' ? 35.84*1.4*160 : 5120;
 const pos = (p,map) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>=0 && p.x<=mapSize(map) && p.y>=0 && p.y<=mapSize(map) && Number.isInteger(p.direction) && p.direction>=0 && p.direction<=3;
 function world(w,total,map) {
   if (!w || !['lobby','play','won','lost'].includes(w.status) || !Array.isArray(w.taken) || w.taken.length!==total || !w.taken.every(x=>typeof x==='boolean') || !Array.isArray(w.foes) || w.foes.length>4 || !w.foes.every(p=>pos(p,map)) || !Array.isArray(w.dead) || w.dead.length>4 || !w.dead.every(x=>typeof x==='string'&&x.length<=36) || !Number.isFinite(w.time) || w.time<0 || w.time>86400) throw Error('Estado de partida inválido');
@@ -54,7 +58,7 @@ function leave(ws) {
 }
 sockets.on('connection',ws=>{
   ws.alive=true; ws.rateTime=Date.now(); ws.rate=0;
-  ws.on('pong',()=>ws.alive=true);const file = pathname === '/' ? entry : path.resolve(root, '.' + pathname)if (pathname !== '/' && !file.startsWith(root + path.sep)) throw Error()
+  ws.on('pong',()=>ws.alive=true);
   ws.on('error',()=>{});
   ws.on('close',()=>leave(ws));
   ws.on('message',raw=>{
