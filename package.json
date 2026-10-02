@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {"node": ">=22"},
-  "scripts": {"build": "tar -xzf public.tar.gz && tar -xzf audio.tar.gz", "start": "node server.mjs", "test": "node test-server.mjs"},
+  "scripts": {"build": "tar -xzf public.tar.gz && tar -xzf audio.tar.gz -C public", "start": "node server.mjs", "test": "node test-server.mjs"},
   "dependencies": {"ws": "^8.18.3"}
 }
 
