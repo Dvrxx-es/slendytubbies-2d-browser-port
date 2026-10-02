@@ -33,7 +33,7 @@ server.on('upgrade',(req,socket,head)=>{
 // Mainland scenery and collision geometry are enlarged by the same 1.4 scale
 // used by the browser client. Keep the server boundary in that coordinate
 // space so a player can sync from the spawn point and reach the full map.
-const mapSize = map => map==='mainland' ? 35.84*1.4*160 : 5120;
+const mapSize = map => (map==='mainland' || map==='mainland_s3') ? 35.84*1.4*160 : 5120;
 const pos = (p,map) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>=0 && p.x<=mapSize(map) && p.y>=0 && p.y<=mapSize(map) && Number.isInteger(p.direction) && p.direction>=0 && p.direction<=3;
 function world(w,total,map) {
   if (!w || !['lobby','play','won','lost'].includes(w.status) || !Array.isArray(w.taken) || w.taken.length!==total || !w.taken.every(x=>typeof x==='boolean') || !Array.isArray(w.foes) || w.foes.length>4 || !w.foes.every(p=>pos(p,map)) || !Array.isArray(w.dead) || w.dead.length>4 || !w.dead.every(x=>typeof x==='string'&&x.length<=36) || !Number.isFinite(w.time) || w.time<0 || w.time>86400) throw Error('Estado de partida inválido');
