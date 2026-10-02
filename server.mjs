@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');const entry = path.join(path.dirname(fileURLToPath(import.meta.url)), 'index-live.html');
 const maps = new Set(['mainland','mainland_s3','caves','mountains','lair','station','outskirts','outskirts_dawn','lake','school','reject','dream','maze','blue']);
 const rooms = new Map();
 const mime = {'.html':'text/html; charset=utf-8','.png':'image/png','.ogg':'audio/ogg','.ttf':'font/ttf','.js':'text/javascript; charset=utf-8'};
@@ -15,8 +15,8 @@ const server = http.createServer(async (req,res) => {
   if (!['GET','HEAD'].includes(req.method)) { res.writeHead(405); return res.end(); }
   try {
     const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-    const file = path.resolve(root, '.' + (pathname === '/' ? '/index.html' : pathname));
-    if (!file.startsWith(root + path.sep)) throw Error();
+    const file = pathname === '/' ? entry : path.resolve(root, '.' + pathname);
+    if (pathname !== '/' && !file.startsWith(root + path.sep))
     const info = await stat(file); if (!info.isFile()) throw Error();
     res.writeHead(200, {'Content-Type':mime[path.extname(file)]||'application/octet-stream','Content-Length':info.size,'Cache-Control':file.endsWith('.html')?'no-cache':'public, max-age=3600','X-Content-Type-Options':'nosniff','Referrer-Policy':'strict-origin-when-cross-origin'});
     if (req.method === 'HEAD') res.end(); else createReadStream(file).on('error',()=>res.destroy()).pipe(res);
@@ -54,7 +54,7 @@ function leave(ws) {
 }
 sockets.on('connection',ws=>{
   ws.alive=true; ws.rateTime=Date.now(); ws.rate=0;
-  ws.on('pong',()=>ws.alive=true);
+  ws.on('pong',()=>ws.alive=true);const file = pathname === '/' ? entry : path.resolve(root, '.' + pathname)if (pathname !== '/' && !file.startsWith(root + path.sep)) throw Error()
   ws.on('error',()=>{});
   ws.on('close',()=>leave(ws));
   ws.on('message',raw=>{
