@@ -5,7 +5,7 @@ async function client(){const s=new WebSocket('ws://127.0.0.1:10002/rooms');sock
 try{
 const owner=await client(),admin=await client(),guest=await client();
 await assert.rejects(guest.call({action:'adminList'}),/sesión/);await assert.rejects(owner.call({action:'adminAuth',username:'fake',key:'test-owner'}),/incorrecta/);
-assert.equal((await owner.call({action:'adminAuth',username:'Dvrxx',key:'test-owner'})).role,'owner');assert.equal((await admin.call({action:'adminAuth',username:'Chiflis3',key:'test-admin'})).role,'admin');
+assert.equal((await owner.call({action:'adminAuth',username:' dVrXX ',key:' test-owner '})).role,'owner');assert.equal((await admin.call({action:'adminAuth',username:' chiflis3 ',key:' test-admin '})).role,'admin');
 const a=await owner.call({action:'create',map:'lake',roomName:'Visible',name:'other'}),b=await guest.call({action:'join',roomId:a.code});
 const world={status:'play',time:0,taken:Array(10).fill(false),foes:[],dead:[]};await owner.call({...a,action:'sync',position:{x:100,y:100,direction:0},world});assert.equal((await guest.call({action:'list'})).rooms[0].status,'play');
 const config={action:'adminConfig',roomId:a.code,map:'mainland',custardCount:25,enemy:'yeti',mapScale:2};await assert.rejects(guest.call(config),/sesión/);await assert.rejects(guest.call({...config,role:'owner',ownerPowers:true}),/sesión/);
