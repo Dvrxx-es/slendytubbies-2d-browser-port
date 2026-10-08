@@ -116,7 +116,7 @@ sockets.on('connection',ws=>{
           if (rooms.size>=100) throw Error('Servidor lleno. Intenta más tarde.');
           let code; do { code=randomBytes(4).toString('hex').toUpperCase(); } while(rooms.has(code));
           const roomName=typeof b.roomName==='string'?b.roomName.trim().slice(0,28)||'Partida de Guardián':'Partida de Guardián';
-          room={code,name:roomName,map:b.map,custardCount,host:null,members:new Map(),world:{status:'lobby',taken:Array(custardCount).fill(false),foes:[],dead:[],time:0}};
+          room={code,name:roomName,chat:[],map:b.map,custardCount,host:null,members:new Map(),world:{status:'lobby',taken:Array(custardCount).fill(false),foes:[],dead:[],time:0}};
           rooms.set(code,room);
         } else {
           room=rooms.get(String(b.roomId||b.code||'').trim().toUpperCase());
@@ -127,11 +127,18 @@ sockets.on('connection',ws=>{
         const m={id:randomUUID(),token:randomUUID(),code:room.code,name:roleOf(ws)?ws.username:typeof b.name==='string'?b.name.trim().slice(0,20)||'Guardián':'Guardián',position:null,socket:ws};
         room.members.set(m.id,m); ws.member=m;
         if (!room.host) room.host=m.id;
-        result={roomId:room.code,code:room.code,roomName:room.name,id:m.id,token:m.token,host:room.host===m.id,map:room.map,custardCount:room.custardCount,revision:room.revision||0,enemy:room.enemy||'default',mapScale:room.mapScale||1};
+        result={roomId:room.code,code:room.code,roomName:room.name,id:m.id,token:m.token,host:room.host===m.id,map:room.map,custardCount:room.custardCount,revision:room.revision||0,enemy:room.enemy||'default',mapScale:room.mapScale||1,chat:room.chat||[]};
       } else {
         const m=ws.member,room=m&&rooms.get(m.code);
         if (!room || b.token!==m.token || b.code!==m.code) throw Error('La sesión de sala terminó');
         if (b.action==='leave') { leave(ws); result={ok:true}; }
+        else if (b.action==='chat') {
+          if(typeof b.text!=='string'||b.text.length>240)throw Error('El mensaje debe tener entre 1 y 240 caracteres');
+          const text=b.text.replace(/[\u0000-\u001f\u007f]/g,' ').trim();if(!text)throw Error('Escribe un mensaje');
+          const now=Date.now();if(now-(ws.lastChat||0)<750)throw Error('Espera un momento antes de enviar otro mensaje');ws.lastChat=now;
+          const message={id:randomUUID(),playerId:m.id,name:m.name,role:roleOf(ws),text,time:now};room.chat??=[];room.chat.push(message);if(room.chat.length>50)room.chat.shift();
+          for(const member of room.members.values())send(member.socket,{event:'chat',code:room.code,message});result={ok:true};
+        }
         else if (b.action==='sync') {
           if((b.revision||0)!==(room.revision||0)){send(ws,{requestId:b.requestId,data:{reconfigure:roomConfig(room)}});return;}
           if (b.position!=null && !pos(b.position,room.map,room.mapScale||1)) throw Error('Posición inválida');
