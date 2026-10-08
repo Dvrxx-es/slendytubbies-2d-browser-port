@@ -70,7 +70,8 @@ const mapSize = map => (map==='mainland' || map==='mainland_s3') ? 35.84*1.4*160
 const pos = (p,map,scale=1) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>=0 && p.x<=mapSize(map)*scale && p.y>=0 && p.y<=mapSize(map)*scale && Number.isInteger(p.direction) && p.direction>=0 && p.direction<=3;
 function world(w,total,map,scale=1) {
   if (!w || !['lobby','play','won','lost'].includes(w.status) || !Array.isArray(w.taken) || w.taken.length!==total || !w.taken.every(x=>typeof x==='boolean') || !Array.isArray(w.foes) || w.foes.length>12 || !w.foes.every(p=>pos(p,map,scale)&&(p.kind===undefined||enemyKinds.has(p.kind)&&p.kind!=='default')) || !Array.isArray(w.dead) || w.dead.length>4 || !w.dead.every(x=>typeof x==='string'&&x.length<=36) || !Number.isFinite(w.time) || w.time<0 || w.time>86400) throw Error('Estado de partida inválido');
-  return {status:w.status,taken:w.taken,foes:w.foes.map(p=>({x:p.x,y:p.y,direction:p.direction,...(p.kind?{kind:p.kind}:{})})),dead:w.dead,time:w.time};
+  const locations=Array.isArray(w.locations)&&w.locations.length===total&&w.locations.every(p=>pos({...p,direction:0},map,scale))?w.locations.map(p=>({x:p.x,y:p.y})):[];
+  return {status:w.status,taken:w.taken,locations,foes:w.foes.map(p=>({x:p.x,y:p.y,direction:p.direction,...(p.kind?{kind:p.kind}:{})})),dead:w.dead,time:w.time};
 }
 function send(ws,data) { if(ws.readyState===WebSocket.OPEN && ws.bufferedAmount<256000) ws.send(JSON.stringify(data)); }
 function publicRooms() {
@@ -120,7 +121,7 @@ sockets.on('connection',ws=>{
         } else {
           room=rooms.get(String(b.roomId||b.code||'').trim().toUpperCase());
           if (!room) throw Error('La sala no existe o el anfitrión se desconectó');
-          if (room.world.status!=='lobby') throw Error('La partida ya comenzó');
+          if (!['lobby','play'].includes(room.world.status)) throw Error('La partida terminó');
           if (room.members.size>=4) throw Error('La sala está llena');
         }
         const m={id:randomUUID(),token:randomUUID(),code:room.code,name:roleOf(ws)?ws.username:typeof b.name==='string'?b.name.trim().slice(0,20)||'Guardián':'Guardián',position:null,socket:ws};
