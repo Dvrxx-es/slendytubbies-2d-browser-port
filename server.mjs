@@ -66,7 +66,8 @@ server.on('upgrade',(req,socket,head)=>{
 // Mainland scenery and collision geometry are enlarged by the same 1.4 scale
 // used by the browser client. Keep the server boundary in that coordinate
 // space so a player can sync from the spawn point and reach the full map.
-const mapSize = map => (map==='mainland' || map==='mainland_s3') ? 35.84*1.4*160 : 5120;
+const guestName=()=> 'Guest '+(100+randomBytes(2).readUInt16BE(0)%900);
+const mapSize = map => (map==='mainland' || map==='mainland_s3') ? 35.84*1.4*160 : (map==='dream'||map==='lake') ? 7168 : 5120;
 const pos = (p,map,scale=1) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>=0 && p.x<=mapSize(map)*scale && p.y>=0 && p.y<=mapSize(map)*scale && Number.isInteger(p.direction) && p.direction>=0 && p.direction<=3;
 function world(w,total,map,scale=1) {
   if (!w || !['lobby','play','won','lost'].includes(w.status) || !Array.isArray(w.taken) || w.taken.length!==total || !w.taken.every(x=>typeof x==='boolean') || !Array.isArray(w.foes) || w.foes.length>12 || !w.foes.every(p=>pos(p,map,scale)&&(p.kind===undefined||enemyKinds.has(p.kind)&&p.kind!=='default')) || !Array.isArray(w.dead) || w.dead.length>4 || !w.dead.every(x=>typeof x==='string'&&x.length<=36) || !Number.isFinite(w.time) || w.time<0 || w.time>86400) throw Error('Estado de partida inválido');
@@ -77,7 +78,7 @@ function send(ws,data) { if(ws.readyState===WebSocket.OPEN && ws.bufferedAmount<
 function publicRooms() {
   return [...rooms.values()].map(room=>({
     id:room.code,name:room.name,map:room.map,custardCount:room.custardCount,
-    players:room.members.size,maxPlayers:4,hostName:room.host?[...room.members.values()].find(p=>p.id===room.host)?.name||'Guardián':'Guardián',status:room.world.status
+    players:room.members.size,maxPlayers:4,hostName:room.host?[...room.members.values()].find(p=>p.id===room.host)?.name||'Guest':'Guest',status:room.world.status
   }));
 }
 function leave(ws) {
@@ -124,7 +125,7 @@ sockets.on('connection',ws=>{
           if (!['lobby','play'].includes(room.world.status)) throw Error('La partida terminó');
           if (room.members.size>=4) throw Error('La sala está llena');
         }
-        const m={id:randomUUID(),token:randomUUID(),code:room.code,name:roleOf(ws)?ws.username:typeof b.name==='string'?b.name.trim().slice(0,20)||'Guardián':'Guardián',position:null,socket:ws};
+        const m={id:randomUUID(),token:randomUUID(),code:room.code,name:roleOf(ws)?ws.username:typeof b.name==='string'?b.name.trim().slice(0,20)||guestName():guestName(),position:null,socket:ws};
         room.members.set(m.id,m); ws.member=m;
         if (!room.host) room.host=m.id;
         result={roomId:room.code,code:room.code,roomName:room.name,id:m.id,token:m.token,host:room.host===m.id,map:room.map,custardCount:room.custardCount,revision:room.revision||0,enemy:room.enemy||'default',mapScale:room.mapScale||1,chat:room.chat||[]};
