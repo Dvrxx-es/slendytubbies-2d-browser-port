@@ -8,7 +8,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
 const entry = path.join(path.dirname(fileURLToPath(import.meta.url)), 'index-live.html');
-const maps = new Set(['mainland','mainland_s3','caves','mountains','lair','station','outskirts','outskirts_dawn','lake','school','reject','dream','maze','blue']);
+const maps = new Set(['mainland','mainland_s3','caves','mountains','lair','station','outskirts','outskirts_dawn','lake','school','reject','dream','maze']);
 const rooms = new Map();
 const adminAttempts=new Map();
 const accountDigests={Dvrxx:{role:'owner',digest:process.env.OWNER_PASSWORD?createHash('sha256').update(process.env.OWNER_PASSWORD).digest():null},Chiflis3:{role:'admin',ownerPowers:true,digest:process.env.ADMIN_PASSWORD?createHash('sha256').update(process.env.ADMIN_PASSWORD).digest():null}};
