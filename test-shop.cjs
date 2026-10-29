@@ -6,3 +6,6 @@ profileCustards=15;hatChoice=2;document.querySelector('#buy-hat').onclick();if(p
 if(equippedHat!==2||!ownedHats.has(2)||profileCustards!==7||furColor!==7)throw Error('Persistence');
 profileCustards=20;hatChoice=4;const oldSave=profileStorage.setItem;profileStorage.setItem=()=>{throw Error('Full')};document.querySelector('#buy-hat').onclick();if(profileCustards!==20||ownedHats.has(4)||equippedHat!==2)throw Error('Failed-save rollback');profileStorage.setItem=oldSave;console.log('PASS buy, equip, insufficient balance, no repeat charge, pickup persistence, reload and storage failure');
 `,reload);
+
+vm.runInContext(`profileCustards=99;hatChoice=29;updateShopButton();document.querySelector('#buy-hat').onclick();if(ownedHats.has(29)||profileCustards!==99)throw Error('Ao Oni underpriced');profileCustards=110;document.querySelector('#buy-hat').onclick();if(profileCustards!==10||equippedHat!==29||!ownedHats.has(29))throw Error('Ao Oni purchase');document.querySelector('#buy-hat').onclick();if(profileCustards!==10)throw Error('Ao Oni double charge');`,reload);
+vm.runInContext(source+`if(equippedHat!==29||!ownedHats.has(29)||profileCustards!==10)throw Error('Ao Oni persistence');console.log('PASS Ao Oni price 100, ownership, equip and reload');`,vm.createContext({...sandbox}));
