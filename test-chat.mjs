@@ -5,7 +5,7 @@ async function client(){const s=new WebSocket('ws://127.0.0.1:10002/rooms');sock
 
 try{
  const host=await client(),guest=await client(),outsider=await client();
- const hr=await host.call({action:'create',map:'blue',name:'Host'}),gr=await guest.call({action:'join',roomId:hr.code,name:'Guest'});await outsider.call({action:'create',map:'blue',name:'Other'});
+ const hr=await host.call({action:'create',map:'mainland',name:'Host'}),gr=await guest.call({action:'join',roomId:hr.code,name:'Guest'});await outsider.call({action:'create',map:'mainland',name:'Other'});
  const received=[],other=[];guest.s.on('message',r=>{const m=JSON.parse(r);if(m.event==='chat')received.push(m)});outsider.s.on('message',r=>{const m=JSON.parse(r);if(m.event==='chat')other.push(m)});
  await assert.rejects(outsider.call({...hr,action:'chat',text:'wrong room'}),/sesión/);
  await host.call({...hr,action:'chat',text:'Hola <img src=x onerror=alert(1)>',name:'Dvrxx',role:'owner'});
@@ -15,3 +15,4 @@ try{
  const late=await client(),lr=await late.call({action:'join',roomId:hr.code});assert.equal(lr.chat.length,2);assert.equal(lr.chat[1].role,'owner');assert.equal(lr.chat[1].name,'Dvrxx');await guest.call({...gr,action:'leave'});await assert.rejects(guest.call({...gr,action:'chat',text:'after leave'}),/sesión/);
  console.log('PASS room-only delivery, verified names/roles, history, limits, spam protection and membership checks');
 }finally{for(const s of sockets)s.close();child.kill();}
+

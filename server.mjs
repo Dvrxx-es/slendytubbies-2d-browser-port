@@ -13,30 +13,37 @@ const rooms = new Map();
 const adminAttempts=new Map();
 const accountDigests={Dvrxx:{role:'owner',digest:process.env.OWNER_PASSWORD?createHash('sha256').update(process.env.OWNER_PASSWORD).digest():null},Chiflis3:{role:'admin',ownerPowers:true,digest:process.env.ADMIN_PASSWORD?createHash('sha256').update(process.env.ADMIN_PASSWORD).digest():null}};
 const enemyKinds=new Set(['default','none','tinky','tank','dipsy','laalaa','ghost','shadow','crawler','yeti','cave','po','spider','newborn']);
-const isAdmin=ws=>ws.adminUntil>Date.now()&&['owner','admin'].includes(ws.role);
-const roleOf=ws=>isAdmin(ws)?ws.role:null;
+// Authorization state is server-owned and scoped to one live WebSocket.
+const adminSessions=new WeakMap();
+const adminActions=new Set(['adminAuth','adminLogout','adminList','adminInvincible','adminClose','adminKick','adminSpawn','adminConfig']);
+function staffSession(ws){const session=adminSessions.get(ws);if(session&&session.expiresAt>Date.now())return session;adminSessions.delete(ws);ws.invincible=false;return null;}
+const isAdmin=ws=>!!staffSession(ws);
+const roleOf=ws=>staffSession(ws)?.role||null;
+const hasOwnerPowers=ws=>staffSession(ws)?.ownerPowers===true;
 function roomConfig(room){return {map:room.map,custardCount:room.custardCount,enemy:room.enemy||'default',mapScale:room.mapScale||1,revision:room.revision||0};}
 function closeRoom(room){rooms.delete(room.code);for(const m of room.members.values()){m.socket.member=null;send(m.socket,{event:'closed',error:'El administrador cerró la sala.'});}}
 function adminAction(ws,b){
+ if(!adminActions.has(b.action))throw Error('Acción de administrador inválida');
  if(b.action==='adminAuth'){
+  adminSessions.delete(ws);ws.invincible=false;
   const now=Date.now(),attempt=adminAttempts.get(ws.adminIp)||{since:now,count:0};if(now-attempt.since>60000){attempt.since=now;attempt.count=0;}if(++attempt.count>5)throw Error('Demasiados intentos. Espera un minuto.');adminAttempts.set(ws.adminIp,attempt);
-  const digest=createHash('sha256').update(typeof b.key==='string'?b.key.trim():'').digest();const username=typeof b.username==='string'?Object.keys(accountDigests).find(name=>name.toLowerCase()===b.username.trim().toLowerCase()):null;const account=username?accountDigests[username]:null;if(!account?.digest||!timingSafeEqual(account.digest,digest))throw Error('Clave de administrador incorrecta o no configurada');ws.adminUntil=now+3600000;ws.role=account.role;ws.ownerPowers=account.role==='owner'||account.ownerPowers===true;ws.username=username;if(ws.member)ws.member.name=ws.username;return {ok:true,role:ws.role,ownerPowers:ws.ownerPowers,username:ws.username};
+  const digest=createHash('sha256').update(typeof b.key==='string'?b.key.trim():'').digest();const username=typeof b.username==='string'?Object.keys(accountDigests).find(name=>name.toLowerCase()===b.username.trim().toLowerCase()):null;const account=username?accountDigests[username]:null;if(!account?.digest||!timingSafeEqual(account.digest,digest))throw Error('Clave de administrador incorrecta o no configurada');const session=Object.freeze({expiresAt:now+3600000,role:account.role,ownerPowers:account.role==='owner'||account.ownerPowers===true,username});adminSessions.set(ws,session);if(ws.member)ws.member.name=username;return {ok:true,role:session.role,ownerPowers:session.ownerPowers,username};
  }
  if(!isAdmin(ws))throw Error('Inicia sesión como administrador');
- if(b.action==='adminLogout'){ws.adminUntil=0;ws.invincible=false;return {ok:true};}
+ if(b.action==='adminLogout'){adminSessions.delete(ws);ws.invincible=false;return {ok:true};}
  if(b.action==='adminList')return {rooms:[...rooms.values()].map(r=>({id:r.code,name:r.name,...roomConfig(r),players:[...r.members.values()].map(m=>({id:m.id,name:m.name,host:m.id===r.host}))}))};
  if(b.action==='adminInvincible'){ws.invincible=b.enabled===true;return {enabled:ws.invincible};}
  const room=rooms.get(b.roomId);if(!room)throw Error('La sala ya no existe');
  if(b.action==='adminClose'){closeRoom(room);return {ok:true};}
- if(b.action==='adminKick'){const member=room.members.get(b.playerId);if(!member)throw Error('Jugador no encontrado');if(!ws.ownerPowers&&roleOf(member.socket)==='owner')throw Error('Un ADMIN no puede expulsar al OWNER');if(member.id===room.host){closeRoom(room);}else{room.members.delete(member.id);member.socket.member=null;send(member.socket,{event:'closed',error:'El administrador te expulsó de la sala.'});}return {ok:true};}
+ if(b.action==='adminKick'){const member=room.members.get(b.playerId);if(!member)throw Error('Jugador no encontrado');if(!hasOwnerPowers(ws)&&roleOf(member.socket)==='owner')throw Error('Un ADMIN no puede expulsar al OWNER');if(member.id===room.host){closeRoom(room);}else{room.members.delete(member.id);member.socket.member=null;send(member.socket,{event:'closed',error:'El administrador te expulsó de la sala.'});}return {ok:true};}
  if(b.action==='adminSpawn'){
-  if(!ws.ownerPowers)throw Error('Solo permisos OWNER pueden generar objetos');if(ws.member?.code!==room.code||room.world.status!=='play')throw Error('Debes estar jugando en esa sala');
+  if(!hasOwnerPowers(ws))throw Error('Solo permisos OWNER pueden generar objetos');if(ws.member?.code!==room.code||room.world.status!=='play')throw Error('Debes estar jugando en esa sala');
   if(!pos({...b.position,direction:0},room.map,room.mapScale||1))throw Error('Posición inválida');
   if(b.kind==='custard'){if(room.custardCount>=25)throw Error('Máximo 25 papillas');room.custardCount++;room.world.taken.push(false);}else{if(!enemyKinds.has(b.kind)||['default','none'].includes(b.kind))throw Error('Monstruo inválido');if(room.world.foes.length>=12)throw Error('Máximo 12 monstruos');room.world.foes.push({...b.position,direction:0,kind:b.kind});}
   room.revision=(room.revision||0)+1;for(const m of room.members.values())send(m.socket,{event:'adminSpawn',kind:b.kind,position:b.position,revision:room.revision,custardCount:room.custardCount});return {ok:true};
  }
  if(b.action==='adminConfig'){
-  if(!ws.ownerPowers&&(b.custardCount!==room.custardCount||(b.mapScale??1)!==(room.mapScale||1)))throw Error('Solo OWNER puede cambiar el tamaño o las papillas');
+  if(!hasOwnerPowers(ws)&&(b.custardCount!==room.custardCount||(b.mapScale??1)!==(room.mapScale||1)))throw Error('Solo OWNER puede cambiar el tamaño o las papillas');
   if(![0.75,1,1.25,1.5,2].includes(b.mapScale??1))throw Error('Tamaño inválido');
   if(!maps.has(b.map)||!Number.isInteger(b.custardCount)||b.custardCount<1||b.custardCount>25||!enemyKinds.has(b.enemy))throw Error('Configuración inválida');
   room.map=b.map;room.mapScale=b.mapScale??1;room.custardCount=b.custardCount;room.enemy=b.enemy;room.revision=(room.revision||0)+1;room.world={status:'lobby',taken:Array(b.custardCount).fill(false),foes:[],dead:[],time:0};for(const m of room.members.values()){m.position=null;send(m.socket,{event:'adminConfig',config:roomConfig(room)});}return {ok:true};
@@ -45,7 +52,7 @@ function adminAction(ws,b){
 }
 const mime = {'.html':'text/html; charset=utf-8','.png':'image/png','.ogg':'audio/ogg','.ttf':'font/ttf','.js':'text/javascript; charset=utf-8'};
 const server = http.createServer(async (req,res) => {
-  if (req.url === '/health') { res.writeHead(200, {'Content-Type':'application/json'}); return res.end('{"ok":true,"transport":"websocket"}'); }
+  if (req.url === '/health') { res.writeHead(200, {'Content-Type':'application/json'}); return res.end('{"ok":true,"transport":"websocket","authorization":"server-session-v2"}'); }
   if (!['GET','HEAD'].includes(req.method)) { res.writeHead(405); return res.end(); }
   try {
     const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
@@ -95,7 +102,7 @@ sockets.on('connection',ws=>{
   ws.alive=true; ws.rateTime=Date.now(); ws.rate=0;
   ws.on('pong',()=>ws.alive=true);
   ws.on('error',()=>{});
-  ws.on('close',()=>leave(ws));
+  ws.on('close',()=>{adminSessions.delete(ws);leave(ws)});
   ws.on('message',raw=>{
     let b;
     try {
@@ -125,7 +132,7 @@ sockets.on('connection',ws=>{
           if (!['lobby','play'].includes(room.world.status)) throw Error('La partida terminó');
           if (room.members.size>=4) throw Error('La sala está llena');
         }
-        const m={id:randomUUID(),token:randomUUID(),code:room.code,name:roleOf(ws)?ws.username:typeof b.name==='string'?b.name.trim().slice(0,20)||guestName():guestName(),position:null,socket:ws};
+        const m={id:randomUUID(),token:randomUUID(),code:room.code,name:roleOf(ws)?staffSession(ws).username:typeof b.name==='string'?b.name.trim().slice(0,20)||guestName():guestName(),position:null,socket:ws};
         room.members.set(m.id,m); ws.member=m;
         if (!room.host) room.host=m.id;
         result={roomId:room.code,code:room.code,roomName:room.name,id:m.id,token:m.token,host:room.host===m.id,map:room.map,custardCount:room.custardCount,revision:room.revision||0,enemy:room.enemy||'default',mapScale:room.mapScale||1,chat:room.chat||[]};
